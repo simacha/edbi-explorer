@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EDBI — Enterprise Detection Behavior Index</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-primary: #070a0f;
+            --bg-secondary: #0c1018;
+            --bg-tertiary: #111722;
+            --bg-hover: #161d27;
+            --bg-selected: #1a2333;
+            --border: #1e2a3a;
+            --border-light: #253345;
+            --text-primary: #e2e8f0;
+            --text-secondary: #8899aa;
+            --text-muted: #4a5a6a;
+            --accent: #38bdf8;
+            --accent-dim: #0c4a6e;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ─── HEADER ─── */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 0 24px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+        .header-brand { display: flex; align-items: center; gap: 12px; }
+        .header-logo {
+            width: 34px; height: 34px;
+            background: var(--accent);
+            border-radius: 7px;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700; font-size: 13px; color: #000;
+        }
+        .header-title { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; }
+        .header-subtitle { font-size: 10px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.05em; }
+        .header-stats { display: flex; gap: 28px; }
+        .stat-item { text-align: right; }
+        .stat-value { font-size: 20px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1; }
+        .stat-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 2px; }
+
+        /* ─── LAYOUT ─── */
+        .main { display: flex; flex: 1; overflow: hidden; }
+
+        /* ─── SIDEBAR ─── */
+        .sidebar {
+            width: 340px; flex-shrink: 0;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        .sidebar-search { padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+        .search-input {
+            width: 100%;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 13px; outline: none;
+            transition: border-color 0.2s;
+        }
+        .search-input:focus { border-color: var(--accent); }
+        .search-input::placeholder { color: var(--text-muted); }
+
+        .tree { flex: 1; overflow-y: auto; padding: 8px 0; }
+        .tree::-webkit-scrollbar { width: 3px; }
+        .tree::-webkit-scrollbar-track { background: transparent; }
+        .tree::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+
+        /* ─── TREE NODES ─── */
+        .tree-node {
+            display: flex; align-items: center;
+            padding: 7px 16px;
+            cursor: pointer;
+            transition: background 0.12s;
+            user-select: none; gap: 8px;
+        }
+        .tree-node:hover { background: var(--bg-hover); }
+        .tree-node.selected { background: var(--bg-selected); border-left: 2px solid var(--accent); }
+        .tree-l1 > .tree-node { padding-left: 14px; }
+        .tree-l2 > .tree-node { padding-left: 30px; }
+        .tree-l3 > .tree-node { padding-left: 46px; }
+
+        .chevron {
+            width: 14px; height: 14px; flex-shrink: 0;
+            color: var(--text-muted); transition: transform 0.2s;
+        }
+        .chevron.open { transform: rotate(90deg); }
+        .chevron-placeholder { width: 14px; flex-shrink: 0; }
+
+        .tree-label { flex: 1; min-width: 0; }
+        .tree-code { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent); line-height: 1; margin-bottom: 2px; }
+        .tree-name { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+        .tree-l1 .tree-name { font-size: 13px; font-weight: 600; }
+        .tree-l2 .tree-name { font-weight: 500; color: var(--text-secondary); }
+        .tree-l3 .tree-name { color: var(--text-secondary); }
+
+        .tree-children { display: none; }
+        .tree-children.open { display: block; }
+        .tree-loading { padding: 8px 48px; font-size: 11px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+
+        /* ─── BADGES ─── */
+        .sev-badge {
+            font-size: 9px; font-family: 'JetBrains Mono', monospace;
+            padding: 2px 6px; border-radius: 3px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0;
+        }
+        .sev-Critical   { background: rgba(239,68,68,0.15);  color: #ef4444; }
+        .sev-High       { background: rgba(249,115,22,0.15); color: #f97316; }
+        .sev-Medium     { background: rgba(234,179,8,0.15);  color: #eab308; }
+        .sev-Low        { background: rgba(56,189,248,0.15); color: #38bdf8; }
+        .sev-Informational { background: rgba(148,163,184,0.12); color: #94a3b8; }
+        .sev-pending    { background: rgba(139,92,246,0.15); color: #a78bfa; }
+
+        .phase-badge {
+            font-size: 9px; font-family: 'JetBrains Mono', monospace;
+            padding: 2px 7px; border-radius: 3px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .phase-complete   { background: rgba(34,197,94,0.15);  color: #22c55e; }
+        .phase-partial    { background: rgba(245,158,11,0.15); color: #f59e0b; }
+        .phase-phase1     { background: rgba(139,92,246,0.12); color: #a78bfa; }
+
+        /* ─── DETAIL PANEL ─── */
+        .detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+        .detail-empty {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            flex-direction: column; gap: 16px; color: var(--text-muted);
+        }
+        .detail-empty-icon { font-size: 48px; opacity: 0.2; }
+        .detail-empty-text { font-size: 13px; font-family: 'JetBrains Mono', monospace; }
+
+        .detail-header { padding: 20px 28px 0; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+        .detail-meta { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 10px; }
+        .detail-code {
+            font-family: 'JetBrains Mono', monospace; font-size: 11px;
+            color: var(--accent); background: var(--accent-dim);
+            padding: 3px 9px; border-radius: 4px; flex-shrink: 0; margin-top: 4px;
+        }
+        .detail-title-area { flex: 1; }
+        .detail-title { font-size: 20px; font-weight: 700; line-height: 1.3; margin-bottom: 5px; }
+        .detail-breadcrumb { font-size: 11px; color: var(--text-muted); }
+        .detail-badges { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; align-items: flex-end; }
+        .detail-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.65; margin-bottom: 16px; max-width: 820px; }
+
+        /* ─── TABS ─── */
+        .tabs { display: flex; overflow-x: auto; }
+        .tabs::-webkit-scrollbar { display: none; }
+        .tab {
+            padding: 10px 18px; font-size: 12px; font-weight: 500;
+            color: var(--text-muted); cursor: pointer;
+            border-bottom: 2px solid transparent;
+            white-space: nowrap; transition: all 0.15s; user-select: none;
+        }
+        .tab:hover { color: var(--text-secondary); }
+        .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+        /* ─── CONTENT ─── */
+        .detail-content { flex: 1; overflow-y: auto; padding: 24px 28px; }
+        .detail-content::-webkit-scrollbar { width: 3px; }
+        .detail-content::-webkit-scrollbar-track { background: transparent; }
+        .detail-content::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        .content-text {
+            font-size: 13px; line-height: 1.85; color: var(--text-secondary);
+            font-family: 'Outfit', sans-serif; max-width: 900px;
+            white-space: pre-wrap; word-wrap: break-word;
+        }
+
+        .section-hd {
+            font-size: 10px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.1em; color: var(--text-muted);
+            margin-bottom: 16px; padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .no-data { color: var(--text-muted); font-style: italic; font-size: 13px; padding: 24px 0; font-family: 'JetBrains Mono', monospace; }
+
+        /* ─── LOADING ─── */
+        .loading-row { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 12px; font-family: 'JetBrains Mono', monospace; padding: 24px 0; }
+        .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ─── TELEMETRY TABLE ─── */
+        .tel-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .tel-table th {
+            text-align: left; padding: 9px 12px;
+            background: var(--bg-tertiary); color: var(--text-muted);
+            font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em;
+            border-bottom: 1px solid var(--border); font-weight: 700; white-space: nowrap;
+        }
+        .tel-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+        .tel-table tr:hover td { background: var(--bg-hover); }
+        .type-m { background: rgba(239,68,68,0.15); color: #ef4444; font-size: 9px; font-family: 'JetBrains Mono', monospace; padding: 2px 6px; border-radius: 3px; font-weight: 700; text-transform: uppercase; }
+        .type-o { background: rgba(148,163,184,0.1); color: #94a3b8; font-size: 9px; font-family: 'JetBrains Mono', monospace; padding: 2px 6px; border-radius: 3px; font-weight: 700; text-transform: uppercase; }
+        .event-ids { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent); }
+        .degraded-text { font-size: 11px; color: #f97316; font-style: italic; }
+
+        /* ─── OVERVIEW TABLE ─── */
+        .ov-table { border-collapse: collapse; margin-bottom: 24px; }
+        .ov-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+        .ov-label { color: var(--text-muted); font-size: 11px; width: 180px; }
+
+        /* ─── CARDS ─── */
+        .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+        .card {
+            background: var(--bg-tertiary); border: 1px solid var(--border);
+            border-radius: 8px; padding: 16px; cursor: pointer; transition: all 0.15s;
+        }
+        .card:hover { border-color: var(--accent); transform: translateY(-1px); }
+        .card-code { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent); margin-bottom: 6px; }
+        .card-name { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+        .card-desc { font-size: 11px; color: var(--text-muted); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-brand">
+        <div class="header-logo">E</div>
+        <div>
+            <div class="header-title">EDBI</div>
+            <div class="header-subtitle">Enterprise Detection Behavior Index</div>
+        </div>
+    </div>
+    <div class="header-stats">
+        <div class="stat-item">
+            <div class="stat-value" id="stat-total">—</div>
+            <div class="stat-label">Total Behaviors</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="stat-p2">—</div>
+            <div class="stat-label">Phase 2 Complete</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">19</div>
+            <div class="stat-label">L1 Families</div>
+        </div>
+    </div>
+</div>
+
+<div class="main">
+    <div class="sidebar">
+        <div class="sidebar-search">
+            <input class="search-input" type="text" id="searchInput" placeholder="Search behaviors…" />
+        </div>
+        <div class="tree" id="tree"></div>
+    </div>
+    <div class="detail" id="detail">
+        <div class="detail-empty">
+            <div class="detail-empty-icon">⬡</div>
+            <div class="detail-empty-text">Select a family, category or behavior</div>
+        </div>
+    </div>
+</div>
+
+<script>
+const URL  = 'https://mphqzvlsdvoepioucnyy.supabase.co';
+const KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1waHF6dmxzZHZvZXBpb3Vjbnl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMzI5MjMsImV4cCI6MjA5MjcwODkyM30.PjGXptKf0DEgyBzzxvbY3v-eeNw6j08cJOHNYnzFo68';
+const HDR  = { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` };
+
+const q = (ep) => fetch(`${URL}/rest/v1/${ep}`, { headers: HDR }).then(r => r.json());
+
+const qCount = async (ep) => {
+    const r = await fetch(`${URL}/rest/v1/${ep}`, { headers: { ...HDR, 'Prefer': 'count=exact', 'Range': '0-0' } });
+    return r.headers.get('content-range')?.split('/')[1] || '—';
+};
+
+function esc(s) {
+    return String(s||'')
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#39;')
+        .replace(/\r\n/g,'<br>')
+        .replace(/\n/g,'<br>');
+}
+
+function sevClass(s) {
+    if (!s || s==='pending') return 'sev-pending';
+    const map = { critical:'Critical', high:'High', medium:'Medium', low:'Low', informational:'Informational' };
+    return 'sev-' + (map[s.toLowerCase()] || 'pending');
+}
+function sevLabel(s) { return s && s!=='pending' ? s : 'Pending'; }
+
+function phaseClass(s) {
+    if (s==='complete')   return 'phase-complete';
+    if (s==='call1_done') return 'phase-partial';
+    return 'phase-phase1';
+}
+function phaseLabel(s) {
+    if (s==='complete')   return 'Phase 2 ✓';
+    if (s==='call1_done') return 'Partial';
+    return 'Phase 1';
+}
+
+// ── STATS ──
+async function loadStats() {
+    try {
+        const total = await qCount('l3_behaviors');
+        document.getElementById('stat-total').textContent = total;
+        const p2 = await qCount('l3_behaviors?phase2_status=eq.complete');
+        document.getElementById('stat-p2').textContent = p2;
+    } catch(e) { console.error(e); }
+}
+
+// ── TREE ──
+async function buildTree() {
+    const tree = document.getElementById('tree');
+    tree.innerHTML = '<div class="tree-loading">Loading families…</div>';
+    try {
+        const families = await q('l1_families?select=*&order=family_code');
+        tree.innerHTML = '';
+        families.forEach(f => tree.appendChild(makeFamilyNode(f)));
+    } catch(e) {
+        tree.innerHTML = '<div class="tree-loading">Connection error</div>';
+    }
+}
+
+function chevronSvg(cls='') {
+    return `<svg class="chevron ${cls}" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+    </svg>`;
+}
+
+function makeFamilyNode(f) {
+    const div = document.createElement('div');
+    div.className = 'tree-l1';
+    div.innerHTML = `
+        <div class="tree-node">
+            ${chevronSvg()}
+            <div class="tree-label">
+                <div class="tree-code">${f.family_code}</div>
+                <div class="tree-name">${f.family_name}</div>
+            </div>
+        </div>
+        <div class="tree-children"></div>`;
+    const node = div.querySelector('.tree-node');
+    node.addEventListener('click', () => onFamilyClick(node, f));
+    return div;
+}
+
+async function onFamilyClick(node, f) {
+    document.querySelectorAll('.tree-node.selected').forEach(n=>n.classList.remove('selected'));
+    node.classList.add('selected');
+    showFamilyDetail(f);
+
+    const chev = node.querySelector('.chevron');
+    const kids = node.nextElementSibling;
+    if (kids.classList.contains('open')) { kids.classList.remove('open'); chev.classList.remove('open'); return; }
+    chev.classList.add('open'); kids.classList.add('open');
+    if (kids.children.length) return;
+    kids.innerHTML = '<div class="tree-loading">Loading…</div>';
+    try {
+        const cats = await q(`l2_categories?select=*&family_id=eq.${f.family_id}&order=category_code`);
+        kids.innerHTML = '';
+        cats.forEach(c => kids.appendChild(makeCatNode(c, f)));
+    } catch(e) { kids.innerHTML = '<div class="tree-loading">Error</div>'; }
+}
+
+function makeCatNode(c, f) {
+    const div = document.createElement('div');
+    div.className = 'tree-l2';
+    div.innerHTML = `
+        <div class="tree-node">
+            ${chevronSvg()}
+            <div class="tree-label">
+                <div class="tree-code">${c.category_code}</div>
+                <div class="tree-name">${c.category_name}</div>
+            </div>
+        </div>
+        <div class="tree-children"></div>`;
+    const node = div.querySelector('.tree-node');
+    node.addEventListener('click', () => onCatClick(node, c, f));
+    return div;
+}
+
+async function onCatClick(node, c, f) {
+    document.querySelectorAll('.tree-node.selected').forEach(n=>n.classList.remove('selected'));
+    node.classList.add('selected');
+    showCatDetail(c, f);
+
+    const chev = node.querySelector('.chevron');
+    const kids = node.nextElementSibling;
+    if (kids.classList.contains('open')) { kids.classList.remove('open'); chev.classList.remove('open'); return; }
+    chev.classList.add('open'); kids.classList.add('open');
+    if (kids.children.length) return;
+    kids.innerHTML = '<div class="tree-loading">Loading…</div>';
+    try {
+        const behaviors = await q(`l3_behaviors?select=*&category_id=eq.${c.category_id}&order=behavior_code`);
+        kids.innerHTML = '';
+        behaviors.forEach(b => kids.appendChild(makeBehaviorNode(b, c, f)));
+    } catch(e) { kids.innerHTML = '<div class="tree-loading">Error</div>'; }
+}
+
+function makeBehaviorNode(b, c, f) {
+    const div = document.createElement('div');
+    div.className = 'tree-l3';
+    const sev = sevLabel(b.severity);
+    div.innerHTML = `
+        <div class="tree-node">
+            <div class="chevron-placeholder"></div>
+            <div class="tree-label">
+                <div class="tree-code">${b.behavior_code}</div>
+                <div class="tree-name">${b.behavior_name}</div>
+            </div>
+            <span class="sev-badge ${sevClass(b.severity)}">${sev.charAt(0)}</span>
+        </div>`;
+    const node = div.querySelector('.tree-node');
+    node.addEventListener('click', () => {
+        document.querySelectorAll('.tree-node.selected').forEach(n=>n.classList.remove('selected'));
+        node.classList.add('selected');
+        showBehaviorDetail(b, c, f);
+    });
+    return div;
+}
+
+// ── FAMILY DETAIL ──
+async function showFamilyDetail(f) {
+    const detail = document.getElementById('detail');
+    detail.innerHTML = `
+        <div class="detail-header">
+            <div class="detail-meta">
+                <div class="detail-code">${f.family_code}</div>
+                <div class="detail-title-area">
+                    <div class="detail-title">${f.family_name}</div>
+                    <div class="detail-breadcrumb">L1 Identity Family · Click categories below to explore</div>
+                </div>
+            </div>
+        </div>
+        <div class="detail-content">
+            <div class="section-hd">Categories</div>
+            <div class="cards-grid" id="fam-cats"><div class="loading-row"><div class="spinner"></div>Loading…</div></div>
+        </div>`;
+    try {
+        const cats = await q(`l2_categories?select=*&family_id=eq.${f.family_id}&order=category_code`);
+        const el = document.getElementById('fam-cats');
+        el.innerHTML = '';
+        cats.forEach(c => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `<div class="card-code">${c.category_code}</div><div class="card-name">${c.category_name}</div><div class="card-desc">${esc(c.description||'')}</div>`;
+            el.appendChild(card);
+        });
+    } catch(e) {}
+}
+
+// ── CATEGORY DETAIL ──
+async function showCatDetail(c, f) {
+    const detail = document.getElementById('detail');
+    detail.innerHTML = `
+        <div class="detail-header">
+            <div class="detail-meta">
+                <div class="detail-code">${c.category_code}</div>
+                <div class="detail-title-area">
+                    <div class="detail-title">${c.category_name}</div>
+                    <div class="detail-breadcrumb">${f.family_code} · ${f.family_name}</div>
+                </div>
+            </div>
+            ${c.description ? `<div class="detail-desc">${esc(c.description)}</div>` : ''}
+        </div>
+        <div class="detail-content">
+            <div class="section-hd">Behaviors</div>
+            <div class="cards-grid" id="cat-behaviors"><div class="loading-row"><div class="spinner"></div>Loading…</div></div>
+        </div>`;
+    try {
+        const behaviors = await q(`l3_behaviors?select=*&category_id=eq.${c.category_id}&order=behavior_code`);
+        const el = document.getElementById('cat-behaviors');
+        el.innerHTML = '';
+        behaviors.forEach(b => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <div class="card-header">
+                    <div class="card-code">${b.behavior_code}</div>
+                    <span class="sev-badge ${sevClass(b.severity)}">${sevLabel(b.severity)}</span>
+                </div>
+                <div class="card-name">${b.behavior_name}</div>
+                <div class="card-desc">${esc(b.description||'')}</div>`;
+            card.addEventListener('click', () => showBehaviorDetail(b, c, f));
+            el.appendChild(card);
+        });
+    } catch(e) {}
+}
+
+// ── BEHAVIOR DETAIL ──
+function showBehaviorDetail(b, c, f) {
+    const detail = document.getElementById('detail');
+    const hasP2 = b.phase2_status === 'complete' || b.phase2_status === 'call1_done';
+
+    detail.innerHTML = `
+        <div class="detail-header">
+            <div class="detail-meta">
+                <div class="detail-code">${b.behavior_code}</div>
+                <div class="detail-title-area">
+                    <div class="detail-title">${b.behavior_name}</div>
+                    <div class="detail-breadcrumb">${f.family_code} · ${f.family_name} · ${c.category_code} · ${c.category_name}</div>
+                </div>
+                <div class="detail-badges">
+                    <span class="sev-badge ${sevClass(b.severity)}">${sevLabel(b.severity)}</span>
+                    <span class="phase-badge ${phaseClass(b.phase2_status)}">${phaseLabel(b.phase2_status)}</span>
+                </div>
+            </div>
+            <div class="detail-desc">${esc(b.description||'')}</div>
+            <div class="tabs">
+                <div class="tab active"  onclick="switchTab(this,'overview')">Overview</div>
+                <div class="tab" onclick="switchTab(this,'locations')">Occurrence Locations</div>
+                <div class="tab" onclick="switchTab(this,'methods')">Execution Methods</div>
+                <div class="tab" onclick="switchTab(this,'exploitation')">Exploitation Paths</div>
+                <div class="tab" onclick="switchTab(this,'tel-sources')">Telemetry Sources</div>
+                <div class="tab" onclick="switchTab(this,'det-notes')">Detection Notes</div>
+                <div class="tab" onclick="switchTab(this,'tel-table')">Telemetry Table</div>
+            </div>
+        </div>
+        <div class="detail-content">
+            <div class="tab-panel active" id="tab-overview">   <div class="loading-row"><div class="spinner"></div>Loading…</div></div>
+            <div class="tab-panel" id="tab-locations">  <div class="loading-row"><div class="spinner"></div>Loading…</div></div>
+            <div class="tab-panel" id="tab-methods">    <div class="loading-row"><div class="spinner"></div>Loading…</div></div>
+            <div class="tab-panel" id="tab-exploitation"><div class="loading-row"><div class="spinner"></div>Loading…</div></div>
+            <div class="tab-panel" id="tab-tel-sources"> <div class="loading-row"><div class="spinner"></div>Loading…</div></div>
+            <div class="tab-panel" id="tab-det-notes">  <div class="loading-row"><div class="spinner"></div>Loading…</div></div>
+            <div class="tab-panel" id="tab-tel-table">  <div class="loading-row"><div class="spinner"></div>Loading…</div></div>
+        </div>`;
+
+    if (hasP2) loadPhase2(b);
+    else renderPhase1Only(b);
+}
+
+async function loadPhase2(b) {
+    try {
+        const [ctxArr, tel] = await Promise.all([
+            q(`behavior_context?select=*&behavior_id=eq.${b.behavior_id}`),
+            q(`detection_telemetry?select=*&behavior_id=eq.${b.behavior_id}&order=telemetry_type.desc`)
+        ]);
+        const ctx = ctxArr[0] || null;
+        const mand = tel.filter(t=>t.telemetry_type==='mandatory').length;
+
+        // Overview
+        set('tab-overview', `
+            <div class="section-hd">Summary</div>
+            <table class="ov-table">
+                <tr><td class="ov-label">Severity</td><td><span class="sev-badge ${sevClass(b.severity)}">${sevLabel(b.severity)}</span></td></tr>
+		<tr><td class="ov-label">Justification</td><td style="color:var(--text-secondary);font-size:12px">${esc(b.severity_justification||'Not yet 		assigned')}</td></tr>
+                <tr><td class="ov-label">Phase 2 Status</td><td><span class="phase-badge ${phaseClass(b.phase2_status)}">${phaseLabel(b.phase2_status)}</span></td></tr>
+                <tr><td class="ov-label">Telemetry Sources</td><td style="color:var(--text-secondary)">${tel.length} total · <span style="color:#ef4444">${mand} mandatory</span></td></tr>
+                <tr><td class="ov-label">Detection Notes</td><td style="color:var(--text-secondary)">${ctx ? 'Available' : 'Not generated'}</td></tr>
+            </table>
+            ${ctx && ctx.detection_notes ? `<div class="section-hd">Detection Notes Preview</div><div class="content-text" style="max-width:800px">${esc(ctx.detection_notes.split('\n').slice(0,5).join('\n'))}</div>` : ''}
+        `);
+
+        setFormatted('tab-locations',   ctx?.occurrence_locations);
+        setFormatted('tab-methods',     ctx?.execution_methods);
+        setFormatted('tab-exploitation',ctx?.exploitation_paths);
+        setFormatted('tab-tel-sources', ctx?.telemetry_sources);
+        setFormatted('tab-det-notes',   ctx?.detection_notes);
+
+        if (!tel.length) {
+            set('tab-tel-table', noData());
+        } else {
+            const rows = tel.map(t => `
+                <tr>
+                    <td><span class="${t.telemetry_type==='mandatory'?'type-m':'type-o'}">${t.telemetry_type}</span></td>
+                    <td style="color:var(--text-primary);font-weight:500">${esc(t.telemetry_source||'')}</td>
+                    <td style="color:var(--text-secondary)">${esc(t.platform||'')}</td>
+                    <td class="event-ids">${esc(t.event_ids||'')}</td>
+                    <td>${t.degraded_mode ? `<span class="degraded-text">${esc(t.degraded_mode)}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
+                </tr>`).join('');
+            set('tab-tel-table', `
+                <table class="tel-table">
+                    <thead><tr><th>Type</th><th>Source</th><th>Platform</th><th>Event IDs</th><th>Degraded Mode</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>`);
+        }
+    } catch(e) {
+        console.error(e);
+        set('tab-overview', '<div class="no-data">Error loading Phase 2 data.</div>');
+    }
+}
+
+function renderPhase1Only(b) {
+    set('tab-overview', `
+        <div class="section-hd">Phase 1 Behavior Definition</div>
+        <div class="content-text" style="max-width:800px">${esc(b.description||'')}</div>
+        <br><p style="color:var(--text-muted);font-size:12px;font-family:'JetBrains Mono',monospace">Phase 2 detection engineering content not yet generated for this behavior.</p>
+    `);
+    ['tab-locations','tab-methods','tab-exploitation','tab-tel-sources','tab-det-notes','tab-tel-table'].forEach(id => set(id, noData()));
+}
+
+function setFormatted(id, text) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (!text) { el.innerHTML = '<div class="no-data">Phase 2 data not yet generated.</div>'; return; }
+    el.innerHTML = '';
+    const div = document.createElement('div');
+    div.className = 'content-text';
+    div.textContent = text;
+    el.appendChild(div);
+}
+
+function noData() { return '<div class="no-data">Phase 2 data not yet generated for this behavior.</div>'; }
+function set(id, html) { const el = document.getElementById(id); if (el) el.innerHTML = html; }
+
+function switchTab(tabEl, tabId) {
+    tabEl.parentElement.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    tabEl.classList.add('active');
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    const p = document.getElementById(`tab-${tabId}`);
+    if (p) p.classList.add('active');
+}
+
+// ── SEARCH ──
+document.getElementById('searchInput').addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('.tree-l3').forEach(node => {
+        node.style.display = node.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+    if (!q) document.querySelectorAll('.tree-l3').forEach(n => n.style.display = '');
+});
+
+// ── INIT ──
+loadStats();
+buildTree();
+</script>
+</body>
+</html>
